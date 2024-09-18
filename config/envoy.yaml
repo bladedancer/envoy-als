@@ -1,6 +1,6 @@
 node:
-  cluster: ecdsdemo
-  id: ecdsdemo
+  cluster: alsdemo
+  id: alsdemo
 
 admin:
   address:
@@ -22,6 +22,8 @@ static_resources:
           "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
           codec_type: AUTO
           stat_prefix: ingress_http
+          access_log_options:
+            flush_access_log_on_new_request: true
           access_log:
           - name: envoy.access_loggers.stdout
             typed_config:
@@ -47,8 +49,25 @@ static_resources:
                 route:
                   cluster: target
                   auto_host_rewrite: true
-
+                metadata:
+                  filter_metadata:
+                    envoy.filters.http.lua:
+                      audit:
+                        tenant: sampleTenant
+                        projectId: sampleProjectId
+                        projectName: sampleProjectName
+                        projectTag: sampleProjectTag
+                      
           http_filters:
+          - name: audit_metadata 
+            typed_config: 
+              "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua 
+              default_source_code: 
+                inline_string: 
+                  function envoy_on_request(request_handle)
+                      local audit = request_handle:metadata():get("audit")
+                      request_handle:streamInfo():dynamicMetadata():set("axway.apim", "audit", audit)
+                  end 
           - name: envoy.filters.http.router
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router

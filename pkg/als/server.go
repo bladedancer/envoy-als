@@ -10,7 +10,6 @@ import (
 	"syscall"
 
 	alsPb "github.com/envoyproxy/go-control-plane/envoy/service/accesslog/v3"
-	"github.com/golang/protobuf/jsonpb"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"google.golang.org/grpc"
@@ -19,9 +18,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type server struct {
-	marshaler jsonpb.Marshaler
-}
+type server struct{}
 type healthServer struct{}
 
 func (s *healthServer) Check(ctx context.Context, in *healthPb.HealthCheckRequest) (*healthPb.HealthCheckResponse, error) {
@@ -38,6 +35,7 @@ func (s *healthServer) Watch(in *healthPb.HealthCheckRequest, srv healthPb.Healt
 func (s *server) StreamAccessLogs(stream alsPb.AccessLogService_StreamAccessLogsServer) error {
 	for {
 		in, err := stream.Recv()
+
 		log.Println("Received value")
 		if err == io.EOF {
 			return nil
@@ -45,8 +43,13 @@ func (s *server) StreamAccessLogs(stream alsPb.AccessLogService_StreamAccessLogs
 		if err != nil {
 			return err
 		}
-		str, _ := s.marshaler.MarshalToString(in)
-		log.Println(str)
+
+		hales := in.GetHttpLogs()
+		for i, entry := range hales.GetLogEntry() {
+			reqId := entry.GetRequest().GetRequestId()
+			path := entry.GetRequest().GetPath()
+			log.Printf("[%s][%d] %s Metadata , %+v", reqId, i, path, entry.GetCommonProperties().GetMetadata().GetFilterMetadata())
+		}
 	}
 }
 
@@ -75,7 +78,7 @@ func Run() error {
 	signal.Notify(done, syscall.SIGINT, syscall.SIGTERM)
 	<-done
 
-	grpcServer.GracefulStop()
+	grpcServer.Stop()
 	log.Info("Shutdown")
 	return nil
 }
